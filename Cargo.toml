@@ -1,0 +1,10 @@
+[package]
+name = "srt-toolkit"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Validates and pretty-prints SubRip (.srt) subtitle files"
+
+[[bin]]
+name = "srt-toolkit"
+path = "src/main.rs"
