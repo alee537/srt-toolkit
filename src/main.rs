@@ -4,6 +4,7 @@ use std::process;
 
 mod json;
 mod srt;
+mod vtt;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -58,12 +59,27 @@ fn main() {
 
 fn print_usage(program: &str) {
     eprintln!("usage:");
-    eprintln!("  {} validate <file.srt> [--json]", program);
-    eprintln!("  {} format <file.srt> [--json]", program);
+    eprintln!("  {} validate <file.srt|file.vtt> [--json]", program);
+    eprintln!("  {} format <file.srt|file.vtt> [--json]", program);
+}
+
+/// Input format is picked from the file extension: ".vtt" parses as
+/// WebVTT, anything else (including no extension) parses as SubRip.
+fn parse_input(path: &str, contents: &str) -> (Vec<srt::Cue>, Vec<srt::ParseError>) {
+    let is_vtt = match path.rfind('.') {
+        Some(idx) => path[idx + 1..].eq_ignore_ascii_case("vtt"),
+        None => false,
+    };
+
+    if is_vtt {
+        vtt::parse(contents)
+    } else {
+        srt::parse(contents)
+    }
 }
 
 fn run_validate(path: &str, contents: &str, json_mode: bool) {
-    let (cues, errors) = srt::parse(contents);
+    let (cues, errors) = parse_input(path, contents);
     let issues = if errors.is_empty() {
         srt::validate(&cues)
     } else {
@@ -124,7 +140,7 @@ fn run_validate(path: &str, contents: &str, json_mode: bool) {
 }
 
 fn run_format(path: &str, contents: &str, json_mode: bool) {
-    let (cues, errors) = srt::parse(contents);
+    let (cues, errors) = parse_input(path, contents);
     if !errors.is_empty() {
         eprintln!(
             "{} has {} parse error(s), refusing to format:",

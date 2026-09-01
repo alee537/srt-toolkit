@@ -18,6 +18,11 @@ Two commands:
 - `format` - reparses a structurally valid file and rewrites it with
   sequential numbering, zero-padded timestamps, and LF line endings.
 
+Both commands accept `.srt` or `.vtt` input - the format is picked from the
+file extension, and either way you get the same `validate`/`format`
+behavior since both parsers produce the same internal cue list. `format`
+always writes SubRip; there's no WebVTT output yet.
+
 Both commands take `--json` if you want to hand the result to another
 program instead of reading it yourself.
 
@@ -83,6 +88,7 @@ hook or a CI step without pulling in a runtime dependency.
 
 ## status
 
-SubRip (`.srt`) only for now. The parser produces a format-agnostic `Cue`
-list internally, so adding WebVTT input later means writing another
-parser, not touching the validator or formatter.
+Reads SubRip (`.srt`) and WebVTT (`.vtt`) input; writes SubRip only. Cue
+identifiers from WebVTT aren't preserved - like SubRip cue numbers, output
+numbering is always sequential, so there was nothing format-specific worth
+carrying through the internal `Cue` list.
