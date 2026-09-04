@@ -38,6 +38,21 @@ impl Timecode {
         )
     }
 
+    pub fn from_millis(total: u64) -> Timecode {
+        let millis = (total % 1_000) as u32;
+        let total_seconds = total / 1_000;
+        let seconds = (total_seconds % 60) as u32;
+        let total_minutes = total_seconds / 60;
+        let minutes = (total_minutes % 60) as u32;
+        let hours = (total_minutes / 60) as u32;
+        Timecode {
+            hours,
+            minutes,
+            seconds,
+            millis,
+        }
+    }
+
     fn parse(raw: &str) -> Result<Timecode, String> {
         let (time_part, millis_part) = raw
             .split_once(',')
@@ -237,6 +252,51 @@ pub fn validate(cues: &[Cue]) -> Vec<Issue> {
     }
 
     issues
+}
+
+#[derive(Debug, Clone)]
+pub struct Fix {
+    pub cue_number: u32,
+    pub message: String,
+}
+
+/// Adjusts cue timings in place to remove the two timing problems
+/// `validate` flags that have an unambiguous mechanical fix: an overlap
+/// with the previous cue, and a non-positive duration. Duplicate numbering
+/// isn't handled here - `format` always renumbers sequentially, so by the
+/// time a fixed file is written there's nothing left to fix.
+///
+/// Fixes are applied in cue order, and each fix feeds into the next: an
+/// overlap fix moves `previous_end` forward, which can turn a later cue's
+/// start into a new overlap, so cascading pushes resolve in one pass.
+pub fn fix(cues: &mut [Cue]) -> Vec<Fix> {
+    let mut fixes = Vec::new();
+    let mut previous_end: Option<u64> = None;
+
+    for cue in cues.iter_mut() {
+        if let Some(prev_end) = previous_end {
+            if cue.start.to_millis() < prev_end {
+                cue.start = Timecode::from_millis(prev_end);
+                fixes.push(Fix {
+                    cue_number: cue.number,
+                    message: "moved start to the end of the previous cue to remove overlap"
+                        .to_string(),
+                });
+            }
+        }
+
+        if cue.start.to_millis() >= cue.end.to_millis() {
+            cue.end = Timecode::from_millis(cue.start.to_millis() + 1);
+            fixes.push(Fix {
+                cue_number: cue.number,
+                message: "extended end time to be after start time".to_string(),
+            });
+        }
+
+        previous_end = Some(cue.end.to_millis());
+    }
+
+    fixes
 }
 
 /// Rewrites cues as a normalized .srt document: sequential numbering,

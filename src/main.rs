@@ -17,17 +17,24 @@ fn main() {
 
     let command = args[1].as_str();
     let mut json_mode = false;
+    let mut fix_mode = false;
     let mut path: Option<&str> = None;
 
     for arg in &args[2..] {
         match arg.as_str() {
             "--json" => json_mode = true,
+            "--fix" => fix_mode = true,
             other if path.is_none() => path = Some(other),
             other => {
                 eprintln!("unexpected argument '{}'", other);
                 process::exit(2);
             }
         }
+    }
+
+    if fix_mode && command != "format" {
+        eprintln!("--fix is only valid with the 'format' command");
+        process::exit(2);
     }
 
     let path = match path {
@@ -48,7 +55,7 @@ fn main() {
 
     match command {
         "validate" => run_validate(path, &contents, json_mode),
-        "format" => run_format(path, &contents, json_mode),
+        "format" => run_format(path, &contents, json_mode, fix_mode),
         other => {
             eprintln!("unknown command '{}'", other);
             print_usage(program);
@@ -60,7 +67,7 @@ fn main() {
 fn print_usage(program: &str) {
     eprintln!("usage:");
     eprintln!("  {} validate <file.srt|file.vtt> [--json]", program);
-    eprintln!("  {} format <file.srt|file.vtt> [--json]", program);
+    eprintln!("  {} format <file.srt|file.vtt> [--json] [--fix]", program);
 }
 
 /// Input format is picked from the file extension: ".vtt" parses as
@@ -139,8 +146,8 @@ fn run_validate(path: &str, contents: &str, json_mode: bool) {
     }
 }
 
-fn run_format(path: &str, contents: &str, json_mode: bool) {
-    let (cues, errors) = parse_input(path, contents);
+fn run_format(path: &str, contents: &str, json_mode: bool, fix_mode: bool) {
+    let (mut cues, errors) = parse_input(path, contents);
     if !errors.is_empty() {
         eprintln!(
             "{} has {} parse error(s), refusing to format:",
@@ -152,6 +159,8 @@ fn run_format(path: &str, contents: &str, json_mode: bool) {
         }
         process::exit(1);
     }
+
+    let fixes = if fix_mode { srt::fix(&mut cues) } else { Vec::new() };
 
     if json_mode {
         let mut out = String::new();
@@ -169,10 +178,27 @@ fn run_format(path: &str, contents: &str, json_mode: bool) {
                 comma
             ));
         }
+        out.push_str("  ],\n");
+        out.push_str("  \"fixes\": [\n");
+        for (i, f) in fixes.iter().enumerate() {
+            let comma = if i + 1 < fixes.len() { "," } else { "" };
+            out.push_str(&format!(
+                "    {{ \"cue\": {}, \"message\": \"{}\" }}{}\n",
+                f.cue_number,
+                json::escape(&f.message),
+                comma
+            ));
+        }
         out.push_str("  ]\n");
         out.push_str("}\n");
         print!("{}", out);
     } else {
+        if !fixes.is_empty() {
+            eprintln!("{}: fixed {} timing issue(s):", path, fixes.len());
+            for f in &fixes {
+                eprintln!("  cue {}: {}", f.cue_number, f.message);
+            }
+        }
         print!("{}", srt::format(&cues));
     }
 }

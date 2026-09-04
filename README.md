@@ -16,7 +16,15 @@ Two commands:
   text) separately from semantic issues (overlapping cues, a cue that ends
   before it starts, duplicate cue numbers).
 - `format` - reparses a structurally valid file and rewrites it with
-  sequential numbering, zero-padded timestamps, and LF line endings.
+  sequential numbering, zero-padded timestamps, and LF line endings. With
+  `--fix`, it also corrects the two timing issues `validate` can flag:
+  a cue that starts before the previous one ends gets its start time
+  pushed to the previous cue's end, and a cue whose end isn't after its
+  start gets its end time pushed one millisecond past its start. Fixes
+  are listed on stderr (or in a `fixes` array with `--json`) so the
+  reformatted file itself stays clean to redirect or pipe. Duplicate cue
+  numbers aren't something `--fix` touches - `format` always renumbers
+  sequentially, so there's nothing left to fix by the time it runs.
 
 Both commands accept `.srt` or `.vtt` input - the format is picked from the
 file extension, and either way you get the same `validate`/`format`
