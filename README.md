@@ -34,6 +34,12 @@ always writes SubRip; there's no WebVTT output yet.
 Both commands take `--json` if you want to hand the result to another
 program instead of reading it yourself.
 
+Pass `-` as the path to read from stdin instead of a file - output always
+goes to stdout, so `srt-toolkit format - < ripped.srt > clean.srt` works.
+Stdin has no extension to sniff the format from, so it's read as SubRip by
+default; pass `--format vtt` to read WebVTT from stdin instead. `--format`
+also works with a real file path, overriding the extension-based guess.
+
 ## build
 
 ```

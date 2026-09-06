@@ -1,5 +1,6 @@
 use std::env;
 use std::fs;
+use std::io::{self, Read};
 use std::process;
 
 mod json;
@@ -18,13 +19,42 @@ fn main() {
     let command = args[1].as_str();
     let mut json_mode = false;
     let mut fix_mode = false;
+    let mut format_override: Option<&str> = None;
     let mut path: Option<&str> = None;
 
-    for arg in &args[2..] {
-        match arg.as_str() {
-            "--json" => json_mode = true,
-            "--fix" => fix_mode = true,
-            other if path.is_none() => path = Some(other),
+    let mut i = 2;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--json" => {
+                json_mode = true;
+                i += 1;
+            }
+            "--fix" => {
+                fix_mode = true;
+                i += 1;
+            }
+            "--format" => {
+                i += 1;
+                let value = match args.get(i) {
+                    Some(v) => v.as_str(),
+                    None => {
+                        eprintln!("--format requires a value ('srt' or 'vtt')");
+                        process::exit(2);
+                    }
+                };
+                match value {
+                    "srt" | "vtt" => format_override = Some(value),
+                    other => {
+                        eprintln!("unknown format '{}', expected 'srt' or 'vtt'", other);
+                        process::exit(2);
+                    }
+                }
+                i += 1;
+            }
+            other if path.is_none() => {
+                path = Some(other);
+                i += 1;
+            }
             other => {
                 eprintln!("unexpected argument '{}'", other);
                 process::exit(2);
@@ -45,17 +75,31 @@ fn main() {
         }
     };
 
-    let contents = match fs::read_to_string(path) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("could not read '{}': {}", path, e);
-            process::exit(1);
+    // "-" reads from stdin, same convention as most other line-oriented
+    // Unix tools. Stdin has no file extension to sniff, so pass along
+    // "<stdin>" as the display name and require --format for .vtt input.
+    let (contents, display_name) = if path == "-" {
+        let mut buf = String::new();
+        match io::stdin().read_to_string(&mut buf) {
+            Ok(_) => (buf, "<stdin>".to_string()),
+            Err(e) => {
+                eprintln!("could not read from stdin: {}", e);
+                process::exit(1);
+            }
+        }
+    } else {
+        match fs::read_to_string(path) {
+            Ok(c) => (c, path.to_string()),
+            Err(e) => {
+                eprintln!("could not read '{}': {}", path, e);
+                process::exit(1);
+            }
         }
     };
 
     match command {
-        "validate" => run_validate(path, &contents, json_mode),
-        "format" => run_format(path, &contents, json_mode, fix_mode),
+        "validate" => run_validate(&display_name, &contents, json_mode, format_override),
+        "format" => run_format(&display_name, &contents, json_mode, fix_mode, format_override),
         other => {
             eprintln!("unknown command '{}'", other);
             print_usage(program);
@@ -66,16 +110,31 @@ fn main() {
 
 fn print_usage(program: &str) {
     eprintln!("usage:");
-    eprintln!("  {} validate <file.srt|file.vtt> [--json]", program);
-    eprintln!("  {} format <file.srt|file.vtt> [--json] [--fix]", program);
+    eprintln!(
+        "  {} validate <file.srt|file.vtt|-> [--json] [--format srt|vtt]",
+        program
+    );
+    eprintln!(
+        "  {} format <file.srt|file.vtt|-> [--json] [--fix] [--format srt|vtt]",
+        program
+    );
+    eprintln!("  '-' reads the input from stdin; output is always written to stdout.");
 }
 
-/// Input format is picked from the file extension: ".vtt" parses as
-/// WebVTT, anything else (including no extension) parses as SubRip.
-fn parse_input(path: &str, contents: &str) -> (Vec<srt::Cue>, Vec<srt::ParseError>) {
-    let is_vtt = match path.rfind('.') {
-        Some(idx) => path[idx + 1..].eq_ignore_ascii_case("vtt"),
-        None => false,
+/// Input format is picked from `--format` if given, otherwise from the file
+/// extension: ".vtt" parses as WebVTT, anything else (including no
+/// extension, e.g. stdin) parses as SubRip.
+fn parse_input(
+    path: &str,
+    contents: &str,
+    format_override: Option<&str>,
+) -> (Vec<srt::Cue>, Vec<srt::ParseError>) {
+    let is_vtt = match format_override {
+        Some(f) => f == "vtt",
+        None => match path.rfind('.') {
+            Some(idx) => path[idx + 1..].eq_ignore_ascii_case("vtt"),
+            None => false,
+        },
     };
 
     if is_vtt {
@@ -85,8 +144,8 @@ fn parse_input(path: &str, contents: &str) -> (Vec<srt::Cue>, Vec<srt::ParseErro
     }
 }
 
-fn run_validate(path: &str, contents: &str, json_mode: bool) {
-    let (cues, errors) = parse_input(path, contents);
+fn run_validate(path: &str, contents: &str, json_mode: bool, format_override: Option<&str>) {
+    let (cues, errors) = parse_input(path, contents, format_override);
     let issues = if errors.is_empty() {
         srt::validate(&cues)
     } else {
@@ -146,8 +205,14 @@ fn run_validate(path: &str, contents: &str, json_mode: bool) {
     }
 }
 
-fn run_format(path: &str, contents: &str, json_mode: bool, fix_mode: bool) {
-    let (mut cues, errors) = parse_input(path, contents);
+fn run_format(
+    path: &str,
+    contents: &str,
+    json_mode: bool,
+    fix_mode: bool,
+    format_override: Option<&str>,
+) {
+    let (mut cues, errors) = parse_input(path, contents, format_override);
     if !errors.is_empty() {
         eprintln!(
             "{} has {} parse error(s), refusing to format:",
