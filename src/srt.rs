@@ -320,3 +320,110 @@ pub fn format(cues: &[Cue]) -> String {
 
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_a_well_formed_timecode() {
+        let tc = Timecode::parse("01:02:03,456").unwrap();
+        assert_eq!(tc.hours, 1);
+        assert_eq!(tc.minutes, 2);
+        assert_eq!(tc.seconds, 3);
+        assert_eq!(tc.millis, 456);
+    }
+
+    #[test]
+    fn parses_zero_timecode() {
+        let tc = Timecode::parse("00:00:00,000").unwrap();
+        assert_eq!(tc.to_millis(), 0);
+    }
+
+    #[test]
+    fn accepts_hours_past_24() {
+        // Nothing in the format caps hours at 24 - a long compilation reel
+        // can legitimately run past a day of accumulated runtime.
+        let tc = Timecode::parse("30:00:00,000").unwrap();
+        assert_eq!(tc.hours, 30);
+    }
+
+    #[test]
+    fn rejects_minutes_at_60() {
+        assert!(Timecode::parse("00:60:00,000").is_err());
+    }
+
+    #[test]
+    fn rejects_seconds_at_60() {
+        assert!(Timecode::parse("00:00:60,000").is_err());
+    }
+
+    #[test]
+    fn rejects_millis_over_999() {
+        assert!(Timecode::parse("00:00:00,1000").is_err());
+    }
+
+    #[test]
+    fn accepts_millis_at_max() {
+        let tc = Timecode::parse("00:00:00,999").unwrap();
+        assert_eq!(tc.millis, 999);
+    }
+
+    #[test]
+    fn rejects_missing_comma() {
+        assert!(Timecode::parse("00:00:00.500").is_err());
+    }
+
+    #[test]
+    fn rejects_wrong_field_count() {
+        assert!(Timecode::parse("00:00,000").is_err());
+        assert!(Timecode::parse("00:00:00:00,000").is_err());
+    }
+
+    #[test]
+    fn rejects_non_numeric_fields() {
+        assert!(Timecode::parse("aa:00:00,000").is_err());
+        assert!(Timecode::parse("00:00:00,abc").is_err());
+    }
+
+    #[test]
+    fn to_millis_round_trip() {
+        let tc = Timecode {
+            hours: 2,
+            minutes: 15,
+            seconds: 37,
+            millis: 89,
+        };
+        let total = tc.to_millis();
+        assert_eq!(total, 8_137_089);
+        assert_eq!(Timecode::from_millis(total), tc);
+    }
+
+    #[test]
+    fn from_millis_rolls_over_seconds_and_minutes() {
+        // 1 minute, 0 seconds, 0 millis - carries should propagate cleanly
+        // across every field boundary at once.
+        let tc = Timecode::from_millis(60_000);
+        assert_eq!(tc.minutes, 1);
+        assert_eq!(tc.seconds, 0);
+        assert_eq!(tc.millis, 0);
+    }
+
+    #[test]
+    fn from_millis_zero() {
+        let tc = Timecode::from_millis(0);
+        assert_eq!(tc, Timecode { hours: 0, minutes: 0, seconds: 0, millis: 0 });
+    }
+
+    #[test]
+    fn format_zero_pads_every_field() {
+        let tc = Timecode { hours: 1, minutes: 2, seconds: 3, millis: 4 };
+        assert_eq!(tc.format(), "01:02:03,004");
+    }
+
+    #[test]
+    fn format_does_not_truncate_hours_past_two_digits() {
+        let tc = Timecode { hours: 100, minutes: 0, seconds: 0, millis: 0 };
+        assert_eq!(tc.format(), "100:00:00,000");
+    }
+}
