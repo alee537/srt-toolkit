@@ -14,7 +14,12 @@ Two commands:
 - `validate` - parses the file and reports structural parse errors (a cue
   number that isn't a number, a timing line missing `-->`, a cue with no
   text) separately from semantic issues (overlapping cues, a cue that ends
-  before it starts, duplicate cue numbers).
+  before it starts, duplicate cue numbers). With `--strict`, it also flags
+  gaps in cue numbering - a cue whose number isn't exactly one more than
+  the previous cue's. This is off by default because most players go by
+  timing, not cue number, so a renumbered or spliced-together file plays
+  fine even with gaps; `--strict` is for catching it before `format`
+  silently renumbers over it.
 - `format` - reparses a structurally valid file and rewrites it with
   sequential numbering, zero-padded timestamps, and LF line endings. With
   `--fix`, it also corrects the two timing issues `validate` can flag:

@@ -254,6 +254,29 @@ pub fn validate(cues: &[Cue]) -> Vec<Issue> {
     issues
 }
 
+/// Flags gaps in cue numbering - a cue whose number isn't one more than the
+/// previous cue's. Separate from `validate` because most players don't care
+/// about numbering at all (they use timing to find the cue to display), so
+/// this is opt-in via `--strict` rather than a default issue.
+pub fn validate_numbering(cues: &[Cue]) -> Vec<Issue> {
+    let mut issues = Vec::new();
+    let mut expected: Option<u32> = None;
+
+    for cue in cues {
+        if let Some(exp) = expected {
+            if cue.number != exp {
+                issues.push(Issue {
+                    cue_number: cue.number,
+                    message: format!("numbering gap: expected {}, found {}", exp, cue.number),
+                });
+            }
+        }
+        expected = Some(cue.number + 1);
+    }
+
+    issues
+}
+
 #[derive(Debug, Clone)]
 pub struct Fix {
     pub cue_number: u32,
@@ -425,5 +448,53 @@ mod tests {
     fn format_does_not_truncate_hours_past_two_digits() {
         let tc = Timecode { hours: 100, minutes: 0, seconds: 0, millis: 0 };
         assert_eq!(tc.format(), "100:00:00,000");
+    }
+
+    fn cue(number: u32) -> Cue {
+        Cue {
+            number,
+            start: Timecode { hours: 0, minutes: 0, seconds: 0, millis: 0 },
+            end: Timecode { hours: 0, minutes: 0, seconds: 1, millis: 0 },
+            text: vec!["x".to_string()],
+        }
+    }
+
+    #[test]
+    fn numbering_gap_none_for_sequential_cues() {
+        let cues = vec![cue(1), cue(2), cue(3)];
+        assert!(validate_numbering(&cues).is_empty());
+    }
+
+    #[test]
+    fn numbering_gap_flags_skipped_number() {
+        let cues = vec![cue(1), cue(3)];
+        let issues = validate_numbering(&cues);
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].cue_number, 3);
+        assert_eq!(issues[0].message, "numbering gap: expected 2, found 3");
+    }
+
+    #[test]
+    fn numbering_gap_allows_starting_above_one() {
+        // Nothing requires the first cue to be numbered 1 - only that
+        // numbering is sequential from wherever it starts.
+        let cues = vec![cue(5), cue(6)];
+        assert!(validate_numbering(&cues).is_empty());
+    }
+
+    #[test]
+    fn numbering_gap_flags_duplicate_as_a_gap_too() {
+        let cues = vec![cue(1), cue(1)];
+        let issues = validate_numbering(&cues);
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].message, "numbering gap: expected 2, found 1");
+    }
+
+    #[test]
+    fn numbering_gap_flags_backwards_numbering() {
+        let cues = vec![cue(2), cue(1)];
+        let issues = validate_numbering(&cues);
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].message, "numbering gap: expected 3, found 1");
     }
 }

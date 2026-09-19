@@ -19,6 +19,7 @@ fn main() {
     let command = args[1].as_str();
     let mut json_mode = false;
     let mut fix_mode = false;
+    let mut strict_mode = false;
     let mut format_override: Option<&str> = None;
     let mut path: Option<&str> = None;
 
@@ -31,6 +32,10 @@ fn main() {
             }
             "--fix" => {
                 fix_mode = true;
+                i += 1;
+            }
+            "--strict" => {
+                strict_mode = true;
                 i += 1;
             }
             "--format" => {
@@ -67,6 +72,11 @@ fn main() {
         process::exit(2);
     }
 
+    if strict_mode && command != "validate" {
+        eprintln!("--strict is only valid with the 'validate' command");
+        process::exit(2);
+    }
+
     let path = match path {
         Some(p) => p,
         None => {
@@ -98,7 +108,13 @@ fn main() {
     };
 
     match command {
-        "validate" => run_validate(&display_name, &contents, json_mode, format_override),
+        "validate" => run_validate(
+            &display_name,
+            &contents,
+            json_mode,
+            strict_mode,
+            format_override,
+        ),
         "format" => run_format(&display_name, &contents, json_mode, fix_mode, format_override),
         other => {
             eprintln!("unknown command '{}'", other);
@@ -111,7 +127,7 @@ fn main() {
 fn print_usage(program: &str) {
     eprintln!("usage:");
     eprintln!(
-        "  {} validate <file.srt|file.vtt|-> [--json] [--format srt|vtt]",
+        "  {} validate <file.srt|file.vtt|-> [--json] [--strict] [--format srt|vtt]",
         program
     );
     eprintln!(
@@ -144,13 +160,22 @@ fn parse_input(
     }
 }
 
-fn run_validate(path: &str, contents: &str, json_mode: bool, format_override: Option<&str>) {
+fn run_validate(
+    path: &str,
+    contents: &str,
+    json_mode: bool,
+    strict_mode: bool,
+    format_override: Option<&str>,
+) {
     let (cues, errors) = parse_input(path, contents, format_override);
-    let issues = if errors.is_empty() {
+    let mut issues = if errors.is_empty() {
         srt::validate(&cues)
     } else {
         Vec::new()
     };
+    if errors.is_empty() && strict_mode {
+        issues.extend(srt::validate_numbering(&cues));
+    }
     let ok = errors.is_empty() && issues.is_empty();
 
     if json_mode {
