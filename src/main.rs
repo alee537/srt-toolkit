@@ -21,6 +21,7 @@ fn main() {
     let mut fix_mode = false;
     let mut strict_mode = false;
     let mut format_override: Option<&str> = None;
+    let mut output_format: Option<&str> = None;
     let mut path: Option<&str> = None;
 
     let mut i = 2;
@@ -56,6 +57,24 @@ fn main() {
                 }
                 i += 1;
             }
+            "--to" => {
+                i += 1;
+                let value = match args.get(i) {
+                    Some(v) => v.as_str(),
+                    None => {
+                        eprintln!("--to requires a value ('srt' or 'vtt')");
+                        process::exit(2);
+                    }
+                };
+                match value {
+                    "srt" | "vtt" => output_format = Some(value),
+                    other => {
+                        eprintln!("unknown output format '{}', expected 'srt' or 'vtt'", other);
+                        process::exit(2);
+                    }
+                }
+                i += 1;
+            }
             other if path.is_none() => {
                 path = Some(other);
                 i += 1;
@@ -74,6 +93,11 @@ fn main() {
 
     if strict_mode && command != "validate" {
         eprintln!("--strict is only valid with the 'validate' command");
+        process::exit(2);
+    }
+
+    if output_format.is_some() && command != "format" {
+        eprintln!("--to is only valid with the 'format' command");
         process::exit(2);
     }
 
@@ -115,7 +139,14 @@ fn main() {
             strict_mode,
             format_override,
         ),
-        "format" => run_format(&display_name, &contents, json_mode, fix_mode, format_override),
+        "format" => run_format(
+            &display_name,
+            &contents,
+            json_mode,
+            fix_mode,
+            format_override,
+            output_format,
+        ),
         other => {
             eprintln!("unknown command '{}'", other);
             print_usage(program);
@@ -131,7 +162,7 @@ fn print_usage(program: &str) {
         program
     );
     eprintln!(
-        "  {} format <file.srt|file.vtt|-> [--json] [--fix] [--format srt|vtt]",
+        "  {} format <file.srt|file.vtt|-> [--json] [--fix] [--format srt|vtt] [--to srt|vtt]",
         program
     );
     eprintln!("  '-' reads the input from stdin; output is always written to stdout.");
@@ -236,6 +267,7 @@ fn run_format(
     json_mode: bool,
     fix_mode: bool,
     format_override: Option<&str>,
+    output_format: Option<&str>,
 ) {
     let (mut cues, errors) = parse_input(path, contents, format_override);
     if !errors.is_empty() {
@@ -251,6 +283,8 @@ fn run_format(
     }
 
     let fixes = if fix_mode { srt::fix(&mut cues) } else { Vec::new() };
+    let to_vtt = output_format == Some("vtt");
+    let format_tc = |tc: &srt::Timecode| if to_vtt { tc.format_vtt() } else { tc.format() };
 
     if json_mode {
         let mut out = String::new();
@@ -262,8 +296,8 @@ fn run_format(
             out.push_str(&format!(
                 "    {{ \"index\": {}, \"start\": \"{}\", \"end\": \"{}\", \"text\": {} }}{}\n",
                 position + 1,
-                cue.start.format(),
-                cue.end.format(),
+                format_tc(&cue.start),
+                format_tc(&cue.end),
                 json::string_array(&cue.text),
                 comma
             ));
@@ -289,6 +323,10 @@ fn run_format(
                 eprintln!("  cue {}: {}", f.cue_number, f.message);
             }
         }
-        print!("{}", srt::format(&cues));
+        if to_vtt {
+            print!("{}", vtt::format(&cues));
+        } else {
+            print!("{}", srt::format(&cues));
+        }
     }
 }

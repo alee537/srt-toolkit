@@ -34,7 +34,10 @@ Two commands:
 Both commands accept `.srt` or `.vtt` input - the format is picked from the
 file extension, and either way you get the same `validate`/`format`
 behavior since both parsers produce the same internal cue list. `format`
-always writes SubRip; there's no WebVTT output yet.
+writes SubRip by default regardless of the input format; pass `--to vtt` to
+write WebVTT instead (`--to srt` is also accepted, for symmetry). WebVTT
+cue identifiers aren't preserved on the way through - `--to vtt` numbers
+cues sequentially starting at 1, the same as SubRip output does.
 
 Both commands take `--json` if you want to hand the result to another
 program instead of reading it yourself.
@@ -92,6 +95,17 @@ Hello there.
 2
 00:00:03,500 --> 00:00:06,000
 This overlaps the previous cue.
+
+$ srt-toolkit format movie.srt --to vtt
+WEBVTT
+
+1
+00:00:01.000 --> 00:00:04.000
+Hello there.
+
+2
+00:00:03.500 --> 00:00:06.000
+This overlaps the previous cue.
 ```
 
 `format` refuses to run if the file has structural parse errors - fix
@@ -107,7 +121,7 @@ hook or a CI step without pulling in a runtime dependency.
 
 ## status
 
-Reads SubRip (`.srt`) and WebVTT (`.vtt`) input; writes SubRip only. Cue
-identifiers from WebVTT aren't preserved - like SubRip cue numbers, output
-numbering is always sequential, so there was nothing format-specific worth
-carrying through the internal `Cue` list.
+Reads and writes both SubRip (`.srt`) and WebVTT (`.vtt`). Cue identifiers
+from WebVTT input aren't preserved on `--to vtt` output yet - like SubRip
+cue numbers, output numbering is always sequential, since there's nothing
+format-specific carried through the internal `Cue` list today.

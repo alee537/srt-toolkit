@@ -38,6 +38,15 @@ impl Timecode {
         )
     }
 
+    /// Same as `format`, but with the '.' millisecond separator WebVTT uses
+    /// instead of SubRip's ','.
+    pub fn format_vtt(&self) -> String {
+        format!(
+            "{:02}:{:02}:{:02}.{:03}",
+            self.hours, self.minutes, self.seconds, self.millis
+        )
+    }
+
     pub fn from_millis(total: u64) -> Timecode {
         let millis = (total % 1_000) as u32;
         let total_seconds = total / 1_000;
@@ -448,6 +457,12 @@ mod tests {
     fn format_does_not_truncate_hours_past_two_digits() {
         let tc = Timecode { hours: 100, minutes: 0, seconds: 0, millis: 0 };
         assert_eq!(tc.format(), "100:00:00,000");
+    }
+
+    #[test]
+    fn format_vtt_uses_a_dot_before_milliseconds() {
+        let tc = Timecode { hours: 1, minutes: 2, seconds: 3, millis: 4 };
+        assert_eq!(tc.format_vtt(), "01:02:03.004");
     }
 
     fn cue(number: u32) -> Cue {

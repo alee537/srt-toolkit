@@ -124,6 +124,29 @@ pub fn parse(input: &str) -> (Vec<Cue>, Vec<ParseError>) {
     (cues, errors)
 }
 
+/// Rewrites cues as a normalized WebVTT document: the required "WEBVTT"
+/// signature, sequential cue identifiers, zero-padded timestamps with the
+/// '.' millisecond separator, LF line endings, one blank line between cues.
+pub fn format(cues: &[Cue]) -> String {
+    let mut out = String::from("WEBVTT\n\n");
+
+    for (position, cue) in cues.iter().enumerate() {
+        out.push_str(&(position + 1).to_string());
+        out.push('\n');
+        out.push_str(&cue.start.format_vtt());
+        out.push_str(" --> ");
+        out.push_str(&cue.end.format_vtt());
+        out.push('\n');
+        for line in &cue.text {
+            out.push_str(line);
+            out.push('\n');
+        }
+        out.push('\n');
+    }
+
+    out
+}
+
 fn skip_to_blank(lines: &[&str], mut i: usize) -> usize {
     while i < lines.len() && !lines[i].trim().is_empty() {
         i += 1;
@@ -175,4 +198,55 @@ fn parse_timecode(raw: &str) -> Result<Timecode, String> {
         seconds,
         millis,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cue(start_seconds: u32, end_seconds: u32, text: &str) -> Cue {
+        Cue {
+            number: 1,
+            start: Timecode { hours: 0, minutes: 0, seconds: start_seconds, millis: 0 },
+            end: Timecode { hours: 0, minutes: 0, seconds: end_seconds, millis: 0 },
+            text: vec![text.to_string()],
+        }
+    }
+
+    #[test]
+    fn format_starts_with_the_webvtt_signature() {
+        let out = format(&[cue(1, 4, "hi")]);
+        assert!(out.starts_with("WEBVTT\n\n"));
+    }
+
+    #[test]
+    fn format_uses_dot_separated_timecodes_and_sequential_identifiers() {
+        let out = format(&[cue(1, 4, "first"), cue(5, 7, "second")]);
+        assert_eq!(
+            out,
+            "WEBVTT\n\n1\n00:00:01.000 --> 00:00:04.000\nfirst\n\n2\n00:00:05.000 --> 00:00:07.000\nsecond\n\n"
+        );
+    }
+
+    #[test]
+    fn format_renumbers_regardless_of_input_cue_numbers() {
+        let mut cues = vec![cue(1, 4, "first")];
+        cues[0].number = 42;
+        let out = format(&cues);
+        assert!(out.contains("42") == false);
+        assert!(out.contains("\n1\n"));
+    }
+
+    #[test]
+    fn format_round_trips_through_parse() {
+        let (cues, errors) = parse("WEBVTT\n\n1\n00:00:01.000 --> 00:00:04.000\nHello there.\n");
+        assert!(errors.is_empty());
+        let out = format(&cues);
+        let (reparsed, errors) = parse(&out);
+        assert!(errors.is_empty());
+        assert_eq!(reparsed.len(), 1);
+        assert_eq!(reparsed[0].start, cues[0].start);
+        assert_eq!(reparsed[0].end, cues[0].end);
+        assert_eq!(reparsed[0].text, cues[0].text);
+    }
 }
