@@ -7,9 +7,10 @@
 // signature line, an optional non-numeric cue identifier before the timing
 // line, "." instead of "," before milliseconds, an optional hours field,
 // and optional cue settings (e.g. "align:start") trailing the timing line.
-// Cue identifiers aren't kept - like SubRip cue numbers, they're renumbered
-// sequentially on output, so there's nothing format-specific left to carry
-// through `Cue`.
+// A cue identifier is kept on `Cue::identifier` so JSON output can report the
+// original label, but the normalized text output still renumbers cues
+// sequentially like SubRip does - a plain .vtt file has no place to put a
+// name alongside the numbering scheme `format` produces.
 //
 // NOTE and STYLE blocks are recognized and skipped rather than treated as
 // malformed cues.
@@ -51,10 +52,12 @@ pub fn parse(input: &str) -> (Vec<Cue>, Vec<ParseError>) {
             continue;
         }
 
+        let mut identifier: Option<String> = None;
         let mut timing_line_no = i + 1;
         let mut timing_line = lines[i].trim();
         if !timing_line.contains("-->") {
             // This line is a cue identifier; the timing line follows it.
+            identifier = Some(timing_line.to_string());
             i += 1;
             if i >= lines.len() {
                 errors.push(ParseError {
@@ -117,6 +120,7 @@ pub fn parse(input: &str) -> (Vec<Cue>, Vec<ParseError>) {
             start,
             end,
             text,
+            identifier,
         });
         next_number += 1;
     }
@@ -210,6 +214,7 @@ mod tests {
             start: Timecode { hours: 0, minutes: 0, seconds: start_seconds, millis: 0 },
             end: Timecode { hours: 0, minutes: 0, seconds: end_seconds, millis: 0 },
             text: vec![text.to_string()],
+            identifier: None,
         }
     }
 
@@ -235,6 +240,30 @@ mod tests {
         let out = format(&cues);
         assert!(out.contains("42") == false);
         assert!(out.contains("\n1\n"));
+    }
+
+    #[test]
+    fn parse_captures_a_named_cue_identifier() {
+        let (cues, errors) = parse(
+            "WEBVTT\n\nintro\n00:00:01.000 --> 00:00:04.000\nHello there.\n",
+        );
+        assert!(errors.is_empty());
+        assert_eq!(cues[0].identifier, Some("intro".to_string()));
+    }
+
+    #[test]
+    fn parse_leaves_identifier_none_when_absent() {
+        let (cues, errors) = parse("WEBVTT\n\n00:00:01.000 --> 00:00:04.000\nHello there.\n");
+        assert!(errors.is_empty());
+        assert_eq!(cues[0].identifier, None);
+    }
+
+    #[test]
+    fn format_does_not_write_identifiers_into_the_text_output() {
+        let mut cue = cue(1, 4, "hi");
+        cue.identifier = Some("intro".to_string());
+        let out = format(&[cue]);
+        assert!(!out.contains("intro"));
     }
 
     #[test]

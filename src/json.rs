@@ -25,3 +25,10 @@ pub fn string_array(items: &[String]) -> String {
         .collect();
     format!("[{}]", parts.join(", "))
 }
+
+pub fn opt_string(value: &Option<String>) -> String {
+    match value {
+        Some(s) => format!("\"{}\"", escape(s)),
+        None => "null".to_string(),
+    }
+}

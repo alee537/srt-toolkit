@@ -35,9 +35,11 @@ Both commands accept `.srt` or `.vtt` input - the format is picked from the
 file extension, and either way you get the same `validate`/`format`
 behavior since both parsers produce the same internal cue list. `format`
 writes SubRip by default regardless of the input format; pass `--to vtt` to
-write WebVTT instead (`--to srt` is also accepted, for symmetry). WebVTT
-cue identifiers aren't preserved on the way through - `--to vtt` numbers
-cues sequentially starting at 1, the same as SubRip output does.
+write WebVTT instead (`--to srt` is also accepted, for symmetry). Cue
+identifiers aren't preserved in the reformatted text - `--to vtt` numbers
+cues sequentially starting at 1, the same as SubRip output does - but a
+named WebVTT identifier from the input is carried through to `format
+--json` as an `identifier` field, `null` when the cue had none.
 
 Both commands take `--json` if you want to hand the result to another
 program instead of reading it yourself.
@@ -122,6 +124,6 @@ hook or a CI step without pulling in a runtime dependency.
 ## status
 
 Reads and writes both SubRip (`.srt`) and WebVTT (`.vtt`). Cue identifiers
-from WebVTT input aren't preserved on `--to vtt` output yet - like SubRip
-cue numbers, output numbering is always sequential, since there's nothing
-format-specific carried through the internal `Cue` list today.
+from WebVTT input are carried through to `format --json`'s `identifier`
+field but not onto reformatted text output - like SubRip cue numbers,
+output numbering there is always sequential.

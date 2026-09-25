@@ -110,6 +110,10 @@ pub struct Cue {
     pub start: Timecode,
     pub end: Timecode,
     pub text: Vec<String>,
+    /// The original WebVTT cue identifier, if the source had one. SubRip has
+    /// no equivalent - its cue numbers are positional, not names - so `srt`
+    /// always sets this to `None`.
+    pub identifier: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -212,6 +216,7 @@ pub fn parse(input: &str) -> (Vec<Cue>, Vec<ParseError>) {
             start,
             end,
             text,
+            identifier: None,
         });
     }
 
@@ -471,6 +476,7 @@ mod tests {
             start: Timecode { hours: 0, minutes: 0, seconds: 0, millis: 0 },
             end: Timecode { hours: 0, minutes: 0, seconds: 1, millis: 0 },
             text: vec!["x".to_string()],
+            identifier: None,
         }
     }
 

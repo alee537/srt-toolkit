@@ -294,8 +294,9 @@ fn run_format(
         for (position, cue) in cues.iter().enumerate() {
             let comma = if position + 1 < cues.len() { "," } else { "" };
             out.push_str(&format!(
-                "    {{ \"index\": {}, \"start\": \"{}\", \"end\": \"{}\", \"text\": {} }}{}\n",
+                "    {{ \"index\": {}, \"identifier\": {}, \"start\": \"{}\", \"end\": \"{}\", \"text\": {} }}{}\n",
                 position + 1,
+                json::opt_string(&cue.identifier),
                 format_tc(&cue.start),
                 format_tc(&cue.end),
                 json::string_array(&cue.text),
